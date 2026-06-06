@@ -79,7 +79,7 @@ async def process_buy(callback: types.CallbackQuery):
         "📥 **Ваш чек готов!**\n\n"
         "Перейдите по ссылке ниже, выберите удобный способ (можно оплатить рублями прямо внутри Telegram) "
         "и после оплаты обязательно нажмите кнопку **«Проверить оплату»**.",
-        reply_markup=keyboard
+        reply_markup=keyboard  
     )
 
 @dp.callback_query(lambda c: c.data.startswith("check_"))
