@@ -4,8 +4,9 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 
 # 👇 ПОДСТАВЬТЕ ВАШИ КЛЮЧИ ПРЯМО МЕЖДУ КАВЫЧКАМИ ЧЕТКО В ЭТИ ДВЕ СТРОЧКИ:
-TOKEN =8958929445:AAEZCXENcybY0tnLcrZVx6l18WvVKRqcK3M
-CRYPTO_TOKEN =8958929445:AAEZCXENcybY0tnLcrZVx6l18WvVKRqcK3M
+TOKEN = "8958929445:AAGKgb0pgEcVnlFZNJ6bv02NshGMQt79KVY"
+CRYPTO_TOKEN = ""
+
 
 # =====================================================================
 # ДАЛЬШЕ НИЧЕГО НЕ ТРОГАЙТЕ И НЕ ИЗМЕНЯЙТЕ, КОД СДЕЛАЕТ ВСЁ САМ
