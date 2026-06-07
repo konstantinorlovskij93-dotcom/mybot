@@ -13,12 +13,11 @@ except ImportError:
     genai = None
 
 # Безопасное получение всех токенов из переменных окружения (.env)
-BOT_TOKEN = os.environ.get('BOT_TOKEN')
-GEMINI_KEY = os.environ.get('GEMINI_KEY') 
+BOT_TOKEN = os.environ.get "8958929445:AAGKgb0pgEcVnlFZNJ6bv02NshGMQt79KVY"
+GEMINI_KEY = os.environ.get "
 HEROSMS_KEY = os.environ.get('HEROSMS_KEY')
 # Ссылка на оплату теперь обернута в кавычки и тоже может браться из .env (по умолчанию твоя ссылка)
-CRYPTO_BOT_URL = os.environ.get('CRYPTO_BOT_URL', "http://t.me")
-
+CRYPTO_BOT_URL = os.environ.get "@online_sms_receive_bot"
 # Инициализация ИИ клиента
 if genai and GEMINI_KEY:
     try:
