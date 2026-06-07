@@ -7,14 +7,14 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiohttp import web
 import google.generativeai as genai
 
-# Токены берутся из Render
+
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 GEMINI_KEY = os.environ.get('GEMINI_KEY') 
 
-# Секретный ключ от HeroSMS вставляем прямо сюда, чтобы не мучаться с Render!
+
 HEROSMS_KEY="4cbc40A6Adf11c7dAe5A990fcf36e8A2"
 
-# Настраиваем ИИ
+
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
     model = genai.GenerativeModel('gemini-pro')
@@ -24,7 +24,7 @@ else:
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# Главное меню бота
+
 def get_main_keyboard():
     builder = InlineKeyboardBuilder()
     builder.add(types.InlineKeyboardButton(text="📱 Купить номер для СМС", callback_data="buy_number"))
@@ -42,19 +42,19 @@ async def command_start_handler(message: types.Message):
         reply_markup=get_main_keyboard()
     )
 
-# Обработка кнопки "Купить номер" — запрос стран из HeroSMS
+
 @dp.callback_query(F.data == "buy_number")
 async def process_buy_number(callback: types.CallbackQuery):
     await callback.answer()
     
-    # Отправляем запрос к бесплатному API HeroSMS, чтобы получить список доступных стран
+    
     url = f"https://hero-sms.com{HEROSMS_KEY}&action=getTopCountriesByService"
     
     async with aiohttp.ClientSession() as session:
         try:
             async with session.get(url) as response:
                 if response.status == 200:
-                    # Для примера выводим популярные доступные страны кнопками
+                    
                     builder = InlineKeyboardBuilder()
                     builder.add(types.InlineKeyboardButton(text="🇷🇺 Россия", callback_data="country_ru"))
                     builder.add(types.InlineKeyboardButton(text="🇰🇿 Казахстан", callback_data="country_kz"))
@@ -71,7 +71,7 @@ async def process_buy_number(callback: types.CallbackQuery):
         except Exception:
             await callback.message.answer("⚠️ Сервис номеров временно недоступен.")
 
-# Возврат в главное меню
+
 @dp.callback_query(F.data == "main_menu")
 async def process_main_menu(callback: types.CallbackQuery):
     await callback.answer()
@@ -80,7 +80,7 @@ async def process_main_menu(callback: types.CallbackQuery):
         reply_markup=get_main_keyboard()
     )
 
-# Показ баланса
+
 @dp.callback_query(F.data == "balance")
 async def process_balance(callback: types.CallbackQuery):
     await callback.answer()
@@ -95,13 +95,13 @@ async def process_balance(callback: types.CallbackQuery):
         reply_markup=builder.as_markup()
     )
 
-# Режим общения с ИИ
+
 @dp.callback_query(F.data == "chat_ai")
 async def process_chat_ai(callback: types.CallbackQuery):
     await callback.answer()
     await callback.message.answer("🤖 Режим ИИ включен! Просто напишите мне любой текстовый вопрос, и я отвечу.")
 
-# Обработчик сообщений для ИИ-помощника
+
 @dp.message(F.text)
 async def ai_message_handler(message: types.Message):
     if not model:
@@ -115,7 +115,7 @@ async def ai_message_handler(message: types.Message):
     except Exception:
         await message.answer("Я задумался. Задайте вопрос еще раз!")
 
-# Код веб-сервера для Render
+
 async def handle(request):
     return web.Response(text="Bot is alive")
 
