@@ -5,21 +5,23 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiohttp import web
-import google.generativeai as genai
+
+from google import genai
 
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 GEMINI_KEY = os.environ.get('GEMINI_KEY') 
 
 
-HEROSMS_KEY="4cbc40A6Adf11c7dAe5A990fcf36e8A2"
+HEROSMS_KEY = "4cbc40A6Adf11c7dAe5A990fcf36e8A cf36e8A2"
+
+
 
 
 if GEMINI_KEY:
-    genai.configure(api_key=GEMINI_KEY)
-    model = genai.GenerativeModel('gemini-pro')
+    ai_client = genai.Client(api_key=GEMINI_KEY)
 else:
-    model = None
+    ai_client = None
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -47,14 +49,12 @@ async def command_start_handler(message: types.Message):
 async def process_buy_number(callback: types.CallbackQuery):
     await callback.answer()
     
-    
     url = f"https://hero-sms.com{HEROSMS_KEY}&action=getTopCountriesByService"
     
     async with aiohttp.ClientSession() as session:
         try:
             async with session.get(url) as response:
                 if response.status == 200:
-                    
                     builder = InlineKeyboardBuilder()
                     builder.add(types.InlineKeyboardButton(text="🇷🇺 Россия", callback_data="country_ru"))
                     builder.add(types.InlineKeyboardButton(text="🇰🇿 Казахстан", callback_data="country_kz"))
@@ -104,15 +104,19 @@ async def process_chat_ai(callback: types.CallbackQuery):
 
 @dp.message(F.text)
 async def ai_message_handler(message: types.Message):
-    if not model:
+    if not ai_client:
         await message.answer("ИИ временно недоступен.")
         return
         
     await bot.send_chat_action(chat_id=message.chat.id, action="typing")
     try:
-        response = model.generate_content(message.text)
+        
+        response = ai_client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=message.text,
+        )
         await message.answer(response.text)
-    except Exception:
+    except Exception as e:
         await message.answer("Я задумался. Задайте вопрос еще раз!")
 
 
