@@ -1,32 +1,24 @@
 import os
-import asyncio
-import aiohttp
-from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import CommandStart
-from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
-from aiogram.fsm.state import StatesGroup, State
-from aiogram.fsm.context import FSMContext
-from aiohttp import web
+import sys
 
-# Состояния для ИИ-чата, чтобы он не перехватывал обычные сообщения
-class ChatStates(StatesGroup):
-    ai_mode = State()
-
-# Попытка импорта нового SDK Gemini
-try: from google import genai
+try:
+    from google import genai
+    from google.genai import types
+    HAS_GEMINI = True
 except ImportError:
-    genai = None
-# Безопасное получение токенов.
+    HAS_GEMINI = False
+
+# Безопасное получение токенов из переменных окружения Render.
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 GEMINI_KEY = os.environ.get("GEMINI_KEY", "")
 HEROSMS_KEY = os.environ.get("HEROSMS_KEY", "")
 
+# Список ID администраторов бота
+ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "").split(",") if x]
 
-CRYPTO_BOT_URL = os.environ.get("CRYPTO_BOT_URL", "https://@online_sms_receive_bot ")
+# Ссылки в кнопках (Обязаны начинаться с https://)
+CRYPTO_BOT_URL = os.environ.get("CRYPTO_BOT_URL", "https://t.me")
 
-# Инициализация ИИ клиента
-if genai and GEMINI_KEY:
-    try:
         ai_client = genai.Client(api_key=GEMINI_KEY)
     except Exception:
         ai_client = None
