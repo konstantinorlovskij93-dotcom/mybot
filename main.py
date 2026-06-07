@@ -42,6 +42,15 @@ async def command_start_handler(message: types.Message):
         "Здесь вы можете купить виртуальные номера разных стран для активации Telegram, WhatsApp и других сервисов.\n\n"
         "Выберите нужное действие в меню ниже:",
         reply_markup=get_main_keyboard()
+        @dp.message(CommandStart())
+async def command_start_handler(message: types.Message):
+    await message.answer(
+        "Добро пожаловать в автоматический магазин!\n"
+        "Здесь вы можете купить виртуальные номера разных стран.\n"
+        "Выберите нужное действие в меню ниже:",
+        reply_markup=get_main_keyboard()
+    )
+
     )
 
 
