@@ -2,3 +2,7 @@
 pyTelegramBotAPI
 google-genai
 requests
+pyTelegramBotAPI
+google-genai
+requests
+flask
