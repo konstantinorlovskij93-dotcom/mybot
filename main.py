@@ -19,7 +19,7 @@ except ImportError:
     genai = None
 
 # Безопасное получение токенов. Первым аргументом идет имя переменной, вторым - значение по умолчанию
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "8958929445:AAGKgb0pgEcVnlFZNJ6bv02NshGMQt79KVY")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 GEMINI_KEY = os.environ.get("GEMINI_KEY", "")
 HEROSMS_KEY = os.environ.get('HEROSMS_KEY", "")
 # Ссылки в кнопках Обязаны начинаться с https://
