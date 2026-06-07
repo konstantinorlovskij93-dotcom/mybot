@@ -1,8 +1,4 @@
-
-pyTelegramBotAPI
-google-genai
-requests
-pyTelegramBotAPI
+aiogram
 google-genai
 requests
 flask
