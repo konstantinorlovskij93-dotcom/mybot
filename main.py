@@ -189,7 +189,27 @@ async def main():
     await site.start()
     
     print("Бот успешно запущен и готов к работе!")
-    await dp.start_polling(bot)
+    import threading
+from flask import Flask
+
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Бот работает!"
+
+def run_web():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
+
+if __name__ == "__main__":
+    # Запускаем веб-сервер Flask в отдельном потоке для Render
+    threading.Thread(target=run_web, daemon=True).start()
+    
+    # Запуск самого телеграм-бота
+    print("Бот успешно запущен!")
+    bot.infinity_polling()
+
 
 if __name__ == '__main__':
     asyncio.run(main())
