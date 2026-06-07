@@ -14,15 +14,14 @@ class ChatStates(StatesGroup):
 
 # Попытка импорта нового SDK Gemini
 try: from google import genai
-
 except ImportError:
     genai = None
-
-# Безопасное получение токенов. Первым аргументом идет имя переменной, вторым - значение по умолчанию
+# Безопасное получение токенов.
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 GEMINI_KEY = os.environ.get("GEMINI_KEY", "")
 HEROSMS_KEY = os.environ.get("HEROSMS_KEY", "")
-# Ссылки в кнопках Обязаны начинаться с https://
+
+
 CRYPTO_BOT_URL = os.environ.get("CRYPTO_BOT_URL", "https://@online_sms_receive_bot ")
 
 # Инициализация ИИ клиента
