@@ -13,8 +13,8 @@ class ChatStates(StatesGroup):
     ai_mode = State()
 
 # Попытка импорта нового SDK Gemini
-try:
-    from google import genai
+try: from google import genai
+
 except ImportError:
     genai = None
 
