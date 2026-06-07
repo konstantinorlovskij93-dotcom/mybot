@@ -3,20 +3,18 @@ import asyncio
 import aiohttp
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 from aiohttp import web
 
 from google import genai
 
-
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 GEMINI_KEY = os.environ.get('GEMINI_KEY') 
 
-
 HEROSMS_KEY = "4cbc40A6Adf11c7dAe5A990fcf36e8A cf36e8A2"
 
-
-
+# ⚠️ ВСТАВЬТЕ СЮДА ВАШУ МНОГОРАЗОВУЮ ССЫЛКУ, КОТОРУЮ ВЫ СКОПИРОВАЛИ ИЗ @CryptoBot
+CRYPTO_BOT_URL = "https://t.me"
 
 if GEMINI_KEY:
     ai_client = genai.Client(api_key=GEMINI_KEY)
@@ -42,15 +40,6 @@ async def command_start_handler(message: types.Message):
         "Здесь вы можете купить виртуальные номера разных стран для активации Telegram, WhatsApp и других сервисов.\n\n"
         "Выберите нужное действие в меню ниже:",
         reply_markup=get_main_keyboard()
-        @dp.message(CommandStart())
-async def command_start_handler(message: types.Message):
-    await message.answer(
-        "Добро пожаловать в автоматический магазин!\n"
-        "Здесь вы можете купить виртуальные номера разных стран.\n"
-        "Выберите нужное действие в меню ниже:",
-        reply_markup=get_main_keyboard()
-    )
-
     )
 
 
@@ -105,6 +94,39 @@ async def process_balance(callback: types.CallbackQuery):
     )
 
 
+# ХЭНДЛЕР НАЖАТИЯ НА КНОПКУ «ПОПОЛНИТЬ» — ЗАПРАШИВАЕМ РЕАЛЬНЫЙ ТЕЛЕФОН
+@dp.callback_query(F.data == "deposit")
+async def process_deposit(callback: types.CallbackQuery):
+    await callback.answer()
+    
+    # Создаем кнопку внизу экрана для безопасной отправки контакта телефона
+    builder = ReplyKeyboardBuilder()
+    builder.add(types.KeyboardButton(text="📱 Подтвердить номер телефона", request_contact=True))
+    
+    await callback.message.answer(
+        "🔒 Для проведения оплаты вам необходимо подтвердить свой аккаунт.\n\n"
+        "Нажмите кнопку «📱 Подтвердить номер телефона» на вашей клавиатуре внизу.",
+        reply_markup=builder.as_markup(resize_keyboard=True, one_time_keyboard=True)
+    )
+
+
+# ХЭНДЛЕР ЛОВИТ РЕАЛЬНЫЙ НОМЕР И ОТПРАВЛЯЕТ ССЫЛКУ НА КРИПТОБОТ
+@dp.message(F.contact)
+async def handle_contact_and_pay(message: types.Message):
+    user_phone = message.contact.phone_number
+    
+    # Создаем инлайн-кнопку, которая ведет на оплату в ваш CryptoBot
+    builder = InlineKeyboardBuilder()
+    builder.add(types.InlineKeyboardButton(text="💳 Перейти к оплате в CryptoBot", url=CRYPTO_BOT_URL))
+    
+    # Отправляем сообщение со ссылкой. Номер пользователя сохранен в системе!
+    await message.answer(
+         f"✅ Ваш номер телефона ({user_phone}) успешно проверен.\n\n"
+         f"Теперь нажмите на кнопку ниже, чтобы перейти к оплате и пополнению баланса магазина:",
+         reply_markup=builder.as_markup()
+    )
+
+
 @dp.callback_query(F.data == "chat_ai")
 async def process_chat_ai(callback: types.CallbackQuery):
     await callback.answer()
@@ -119,7 +141,6 @@ async def ai_message_handler(message: types.Message):
         
     await bot.send_chat_action(chat_id=message.chat.id, action="typing")
     try:
-        
         response = ai_client.models.generate_content(
             model='gemini-2.5-flash',
             contents=message.text,
