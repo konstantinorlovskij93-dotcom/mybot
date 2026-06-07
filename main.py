@@ -1,46 +1,119 @@
 import os
 import asyncio
+import aiohttp
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiohttp import web
-# Подключаем бесплатную библиотеку ИИ от Google
 import google.generativeai as genai
 
+# Токены берутся из Render
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
-# Сервер сам возьмет этот бесплатный ключ из настроек Render, которые мы только что сохранили
 GEMINI_KEY = os.environ.get('GEMINI_KEY') 
 
+# Секретный ключ от HeroSMS вставляем прямо сюда, чтобы не мучаться с Render!
+HEROSMS_KEY="4cbc40A6Adf11c7dAe5A990fcf36e8A2"
+
 # Настраиваем ИИ
-genai.configure(api_key=GEMINI_KEY)
-model = genai.GenerativeModel('gemini-pro')
+if GEMINI_KEY:
+    genai.configure(api_key=GEMINI_KEY)
+    model = genai.GenerativeModel('gemini-pro')
+else:
+    model = None
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
+# Главное меню бота
+def get_main_keyboard():
+    builder = InlineKeyboardBuilder()
+    builder.add(types.InlineKeyboardButton(text="📱 Купить номер для СМС", callback_data="buy_number"))
+    builder.add(types.InlineKeyboardButton(text="💰 Баланс и Пополнение", callback_data="balance"))
+    builder.add(types.InlineKeyboardButton(text="🤖 Поговорить с ИИ", callback_data="chat_ai"))
+    builder.adjust(1)
+    return builder.as_markup()
+
 @dp.message(CommandStart())
 async def command_start_handler(message: types.Message):
-    builder = InlineKeyboardBuilder()
-    builder.add(types.InlineKeyboardButton(text="📱 Наш сайт", url="https://onrender.com"))
-    builder.add(types.InlineKeyboardButton(text="🔥 Заработать / Помочь", callback_data="btn_click"))
-    builder.adjust(1)
     await message.answer(
-        "Привет! Я твой бот с искусственным интеллектом. Напиши мне любой вопрос, и я отвечу тебе как человек!",
+        "🔥 Добро пожаловать в автоматический магазин СМС-номеров!\n\n"
+        "Здесь вы можете купить виртуальные номера разных стран для активации Telegram, WhatsApp и других сервисов.\n\n"
+        "Выберите нужное действие в меню ниже:",
+        reply_markup=get_main_keyboard()
+    )
+
+# Обработка кнопки "Купить номер" — запрос стран из HeroSMS
+@dp.callback_query(F.data == "buy_number")
+async def process_buy_number(callback: types.CallbackQuery):
+    await callback.answer()
+    
+    # Отправляем запрос к бесплатному API HeroSMS, чтобы получить список доступных стран
+    url = f"https://hero-sms.com{HEROSMS_KEY}&action=getTopCountriesByService"
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(url) as response:
+                if response.status == 200:
+                    # Для примера выводим популярные доступные страны кнопками
+                    builder = InlineKeyboardBuilder()
+                    builder.add(types.InlineKeyboardButton(text="🇷🇺 Россия", callback_data="country_ru"))
+                    builder.add(types.InlineKeyboardButton(text="🇰🇿 Казахстан", callback_data="country_kz"))
+                    builder.add(types.InlineKeyboardButton(text="🇺🇸 США", callback_data="country_us"))
+                    builder.add(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu"))
+                    builder.adjust(2)
+                    
+                    await callback.message.edit_text(
+                        "🌍 Выберите страну для покупки номера:",
+                        reply_markup=builder.as_markup()
+                    )
+                else:
+                    await callback.message.answer("⚠️ Ошибка подключения к базе номеров. Попробуйте позже.")
+        except Exception:
+            await callback.message.answer("⚠️ Сервис номеров временно недоступен.")
+
+# Возврат в главное меню
+@dp.callback_query(F.data == "main_menu")
+async def process_main_menu(callback: types.CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text(
+        "Выберите нужное действие в меню ниже:",
+        reply_markup=get_main_keyboard()
+    )
+
+# Показ баланса
+@dp.callback_query(F.data == "balance")
+async def process_balance(callback: types.CallbackQuery):
+    await callback.answer()
+    builder = InlineKeyboardBuilder()
+    builder.add(types.InlineKeyboardButton(text="💳 Пополнить (Crypto / Карта)", callback_data="deposit"))
+    builder.add(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu"))
+    builder.adjust(1)
+    
+    await callback.message.edit_text(
+        "💰 Ваш баланс: 0.00 руб.\n\n"
+        "Чтобы покупать номера, пополните баланс в боте.",
         reply_markup=builder.as_markup()
     )
 
-# Обработчик любых текстовых сообщений — отправляем их в ИИ
+# Режим общения с ИИ
+@dp.callback_query(F.data == "chat_ai")
+async def process_chat_ai(callback: types.CallbackQuery):
+    await callback.answer()
+    await callback.message.answer("🤖 Режим ИИ включен! Просто напишите мне любой текстовый вопрос, и я отвечу.")
+
+# Обработчик сообщений для ИИ-помощника
 @dp.message(F.text)
 async def ai_message_handler(message: types.Message):
-    # Показываем пользователю статус "печатает...", пока ИИ думает
+    if not model:
+        await message.answer("ИИ временно недоступен.")
+        return
+        
     await bot.send_chat_action(chat_id=message.chat.id, action="typing")
-    
     try:
-        # Генерируем ответ с помощью бесплатного ИИ от Google
         response = model.generate_content(message.text)
         await message.answer(response.text)
-    except Exception as e:
-        await message.answer("Извини, я задумался. Попробуй еще раз чуть позже!")
+    except Exception:
+        await message.answer("Я задумался. Задайте вопрос еще раз!")
 
 # Код веб-сервера для Render
 async def handle(request):
@@ -53,7 +126,6 @@ async def main():
     await runner.setup()
     site = web.TCPSite(runner, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
     await site.start()
-    print("Бот успешно запущен и работает с ИИ!")
     await dp.start_polling(bot)
 
 if __name__ == '__main__':
