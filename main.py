@@ -14,7 +14,7 @@ GEMINI_KEY = os.environ.get('GEMINI_KEY')
 HEROSMS_KEY = "4cbc40A6Adf11c7dAe5A990fcf36e8A cf36e8A2"
 
 # ⚠️ ВСТАВЬТЕ СЮДА ВАШУ МНОГОРАЗОВУЮ ССЫЛКУ, КОТОРУЮ ВЫ СКОПИРОВАЛИ ИЗ @CryptoBot
-CRYPTO_BOT_URL = "https://t.me"
+CRYPTO_BOT_URL = http://t.me/send?start=IVrReyaE4NP5
 
 if GEMINI_KEY:
     ai_client = genai.Client(api_key=GEMINI_KEY)
