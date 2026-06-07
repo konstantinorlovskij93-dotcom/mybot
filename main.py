@@ -207,10 +207,12 @@ if __name__ == "__main__":
     threading.Thread(target=run_web, daemon=True).start()
     
     # Запуск самого телеграм-бота
+    if __name__ == "__main__":
+    # Запускаем веб-сервер Flask в отдельном потоке для Render
+    threading.Thread(target=run_web, daemon=True).start()
+    
+    # Запуск вашего асинхронного телеграм-бота
     print("Бот успешно запущен!")
-    bot.infinity_polling()
-
-
-if __name__ == '__main__':
     asyncio.run(main())
+
 
