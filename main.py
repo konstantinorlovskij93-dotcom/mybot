@@ -11,9 +11,9 @@ logging.basicConfig(level=logging.INFO)
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-RENDER_URL = os.getenv("RENDER_EXTERNAL_URL") 
+# Добавили заглушку на случай локального запуска без .env
+RENDER_URL = os.getenv("RENDER_EXTERNAL_URL", "https://your-local-or-render-url.com") 
 
-# Сделали фиксированный и простой путь, чтобы Telegram не путался
 WEBHOOK_PATH = "/webhook"
 WEBHOOK_URL = f"{RENDER_URL.rstrip('/')}{WEBHOOK_PATH}"
 
@@ -29,15 +29,17 @@ async def echo(message: Message):
     await message.answer(f"Вы написали: {message.text}")
 
 async def on_startup(app: web.Application):
+    # Установка вебхука при запуске
     await bot.set_webhook(url=WEBHOOK_URL, drop_pending_updates=True)
 
 async def on_shutdown(app: web.Application):
+    # Убрали bot.session.close(), так как aiogram/aiohttp сделает это сам
     await bot.delete_webhook()
-    await bot.session.close()
 
 def main():
     app = web.Application()
     
+    # Хэндлер для пинга (чтобы Render не тушил бесплатный тариф)
     async def handle_ping(request):
         return web.Response(text="Бот активен!", content_type="text/plain")
     app.router.add_get("/", handle_ping)
