@@ -1,5 +1,4 @@
 
-    
 import os
 import logging
 import sqlite3
@@ -18,9 +17,12 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 RENDER_URL = os.getenv("RENDER_EXTERNAL_URL", "https://your-local-or-render-url.com") 
 
-# НАСТРОЙКИ SMS HERO (ИСПРАВЛЕНО)
+# НАСТРОЙКИ SMS HERO
 SMS_API_KEY = os.getenv("SMS_API_KEY")
 SMS_BASE_URL = "https://smshero.ru" 
+
+# НАСТРОЙКИ CRYPTOBOT
+CRYPTO_BOT_TOKEN = os.getenv("CRYPTO_BOT_TOKEN")
 
 WEBHOOK_PATH = "/webhook"
 WEBHOOK_URL = f"{RENDER_URL.rstrip('/')}{WEBHOOK_PATH}"
@@ -64,10 +66,6 @@ def get_user(user_id, username=""):
     conn.close()
     return user
 
-def get_user_balance(user_id):
-    user = get_user(user_id)
-    return user[2]
-
 def add_balance(user_id, amount):
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
@@ -82,8 +80,6 @@ def get_main_menu():
         [InlineKeyboardButton(text="💰 Профиль / Пополнить", callback_query_data="profile")],
         [InlineKeyboardButton(text="ℹ️ Инструкция", callback_query_data="help")]
     ])
-
-# --- ХЭНДЛЕРЫ БОТА ---
 
 @dp.message(CommandStart())
 async def cmd_start(message: Message):
@@ -101,8 +97,8 @@ async def back_to_menu(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "profile")
 async def show_profile(callback: CallbackQuery):
-    balance = get_user_balance(callback.from_user.id)
-    text = f"👤 **Ваш профиль:**\n├ ID: `{callback.from_user.id}`\n└ Баланс: **{balance} руб.**"
+    user = get_user(callback.from_user.id)
+    text = f"👤 **Ваш профиль:**\n├ ID: `{callback.from_user.id}`\n└ Баланс: **{user[2]} руб.**"
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💵 Пополнить баланс", callback_query_data="deposit")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_query_data="main_menu")]
@@ -112,49 +108,100 @@ async def show_profile(callback: CallbackQuery):
 @dp.callback_query(F.data == "deposit")
 async def choose_deposit_amount(callback: CallbackQuery):
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="➕ 100 руб.", callback_query_data="pay_100")],
-        [InlineKeyboardButton(text="➕ 300 руб.", callback_query_data="pay_300")],
+        [InlineKeyboardButton(text="➕ 100 руб. (~1.1 USDT)", callback_query_data="pay_100")],
+        [InlineKeyboardButton(text="➕ 300 руб. (~3.3 USDT)", callback_query_data="pay_300")],
+        [InlineKeyboardButton(text="➕ 500 руб. (~5.5 USDT)", callback_query_data="pay_500")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_query_data="profile")]
     ])
-    await callback.message.edit_text("Выберите сумму для пополнения (Тестовый режим):", reply_markup=kb)
+    await callback.message.edit_text("Выберите сумму в рублях для пополнения баланса (оплата в USDT/крипте):", reply_markup=kb)
 
 @dp.callback_query(F.data.startswith("pay_"))
 async def create_payment(callback: CallbackQuery):
-    amount = int(callback.data.split("_")[1])
-    invoice_id = str(uuid.uuid4())[:8]
+    amount_rub = int(callback.data.split("_")[1])
     
-    conn = sqlite3.connect("database.db")
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO invoices (invoice_id, user_id, amount) VALUES (?, ?, ?)", (invoice_id, callback.from_user.id, amount))
-    conn.commit()
-    conn.close()
+    # Конвертируем рубли в доллары для CryptoBot (примерный курс 1$ = 92 руб)
+    amount_usd = round(amount_rub / 92.0, 2)
     
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Подтвердить оплату (Тест)", callback_query_data=f"check_{invoice_id}")],
-        [InlineKeyboardButton(text="⬅️ Отмена", callback_query_data="profile")]
-    ])
-    await callback.message.edit_text(f"Создана заявка на {amount} руб.\nДля теста нажмите 'Подтвердить'.", reply_markup=kb)
+    # Создаем инвойс через API CryptoBot
+    headers = {"Crypto-Pay-API-Token": CRYPTO_BOT_TOKEN}
+    payload = {
+        "amount": str(amount_usd),
+        "asset": "USDT",
+        "description": f"Пополнение баланса на {amount_rub} руб."
+    }
+    
+    async with aiohttp.ClientSession() as session:
+        async with session.post("https://cryptobot.app", json=payload, headers=headers) as resp:
+            result = await resp.json()
+            
+            if result.get("ok"):
+                invoice_data = result["result"]
+                pay_url = invoice_data["bot_invoice_url"]
+                crypto_invoice_id = str(invoice_data["invoice_id"])
+                
+                # Сохраняем информацию в нашу локальную БД
+                conn = sqlite3.connect("database.db")
+                cursor = conn.cursor()
+                cursor.execute("INSERT INTO invoices (invoice_id, user_id, amount) VALUES (?, ?, ?)", (crypto_invoice_id, callback.from_user.id, amount_rub))
+                conn.commit()
+                conn.close()
+                
+                kb = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="💸 Оплатить в CryptoBot", url=pay_url)],
+                    [InlineKeyboardButton(text="✅ Проверить оплату", callback_query_data=f"check_{crypto_invoice_id}")],
+                    [InlineKeyboardButton(text="⬅️ Назад", callback_query_data="profile")]
+                ])
+                
+                await callback.message.edit_text(
+                    f"💸 **Счет на пополнение успешно создан!**\n\nСумма к зачислению: **{amount_rub} руб.**\nСтоимость: **{amount_usd} USDT**\n\nНажмите кнопку ниже, оплатите счет в открывшемся CryptoBot, а затем вернитесь сюда и нажмите кнопку проверки.",
+                    reply_markup=kb,
+                    parse_mode="Markdown"
+                )
+            else:
+                await callback.message.answer("⚠️ Не удалось создать счет. Проверьте правильность CRYPTO_BOT_TOKEN в Render.")
 
 @dp.callback_query(F.data.startswith("check_"))
-async def check_payment(callback: CallbackQuery):
-    invoice_id = callback.data.split("_")[1]
-    conn = sqlite3.connect("database.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT user_id, amount, status FROM invoices WHERE invoice_id = ?", (invoice_id,))
-    invoice = cursor.fetchone()
+async def check_payment_status(callback: CallbackQuery):
+    crypto_invoice_id = callback.data.split("_")[1]
     
-    if invoice and invoice[2] == 'pending':
-        user_id = invoice[0]
-        amount = invoice[1]
-        cursor.execute("UPDATE invoices SET status = 'success' WHERE invoice_id = ?", (invoice_id,))
-        conn.commit()
-        conn.close()
-        add_balance(user_id, amount)
-        await callback.answer("✅ Баланс успешно пополнен!", show_alert=True)
-        await show_profile(callback)
-    else:
-        conn.close()
-        await callback.answer("❌ Оплата не найдена.", show_alert=True)
+    # Запрашиваем статус счета у CryptoBot API
+    headers = {"Crypto-Pay-API-Token": CRYPTO_BOT_TOKEN}
+    params = {"invoice_ids": crypto_invoice_id}
+    
+    async with aiohttp.ClientSession() as session:
+        async with session.get("https://cryptobot.app", params=params, headers=headers) as resp:
+            result = await resp.json()
+            
+            if result.get("ok") and result["result"]["items"]:
+                crypto_invoice = result["result"]["items"][0]
+                
+                # Если статус счета в CryptoBot равен 'paid' (оплачен)
+                if crypto_invoice["status"] == "paid":
+                    conn = sqlite3.connect("database.db")
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT user_id, amount, status FROM invoices WHERE invoice_id = ?", (crypto_invoice_id,))
+                    local_invoice = cursor.fetchone()
+                    
+                    if local_invoice and local_invoice[2] == 'pending':
+                        user_id = local_invoice[0]
+                        amount_rub = local_invoice[1]
+                        
+                        # Обновляем статус в нашей базе, чтобы не начислить дважды
+                        cursor.execute("UPDATE invoices SET status = 'success' WHERE invoice_id = ?", (crypto_invoice_id,))
+                        conn.commit()
+                        conn.close()
+                        
+                        # Начисляем рубли на баланс бота
+                        add_balance(user_id, amount_rub)
+                        await callback.answer("✅ Оплата получена! Баланс успешно пополнен.", show_alert=True)
+                        await show_profile(callback)
+                    else:
+                        conn.close()
+                        await callback.answer("Этот счет уже был обработан.", show_alert=True)
+                else:
+                    await callback.answer("⏳ Счет еще не оплачен. Сначала проведите платеж в CryptoBot.", show_alert=True)
+            else:
+                await callback.answer("❌ Ошибка проверки платежа.", show_alert=True)
 
 @dp.callback_query(F.data == "buy_number")
 async def choose_service(callback: CallbackQuery):
@@ -171,71 +218,12 @@ async def buy_sms_number(callback: CallbackQuery):
     service_code = data[1]  
     price = float(data[2])  
     
-    balance = get_user_balance(callback.from_user.id)
-    if balance < price:
-        await callback.answer("❌ Недостаточно средств на балансе!", show_alert=True)
+    user = get_user(callback.from_user.id)
+    if user[2] < price:
+        await callback.answer("❌ Недостаточно средств на балансе! Пополните профиль.", show_alert=True)
         return
         
     await callback.answer("Запрашиваем номер у SMS Hero...", show_alert=False)
-    
     url = f"{SMS_BASE_URL}?api_key={SMS_API_KEY}&action=getNumber&service={service_code}&country=0"
     
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                response_text = await response.text()
-                
-                if response_text.startswith("ACCESS_NUMBER"):
-                    _, activation_id, phone_number = response_text.split(":")
-                    
-                    conn = sqlite3.connect("database.db")
-                    cursor = conn.cursor()
-                    cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (price, callback.from_user.id))
-                    conn.commit()
-                    conn.close()
-                    
-                    text = (
-                        f"📱 **Номер успешно получен!**\n\n"
-                        f"Сервис: `{service_code.upper()}`\n"
-                        f"Номер: `{phone_number}`\n"
-                        f"ID Активации: `{activation_id}`\n\n"
-                        f"Вставьте номер в приложение и нажмите кнопку ниже, чтобы проверить СМС-код."
-                    )
-                    
-                    kb = InlineKeyboardMarkup(inline_keyboard=[
-                        [InlineKeyboardButton(text="🔄 Получить СМС / Обновить", callback_query_data=f"sms_{activation_id}_{price}")],
-                        [InlineKeyboardButton(text="❌ Отменить номер (Возврат)", callback_query_data=f"cancel_{activation_id}_{price}")]
-                    ])
-                    await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
-                else:
-                    await callback.message.answer(f"⚠️ Ошибка сервиса SMS Hero: {response_text}. Возможно, нет доступных номеров.")
-    except Exception as e:
-        logging.error(f"Ошибка API: {e}")
-        await callback.message.answer("💥 Произошла ошибка при связи с СМС-сервисом.")
-
-@dp.callback_query(F.data.startswith("sms_"))
-async def check_sms_status(callback: CallbackQuery):
-    data = callback.data.split("_")
-    activation_id = data[1]
-    
-    url = f"{SMS_BASE_URL}?api_key={SMS_API_KEY}&action=getStatus&id={activation_id}"
-    
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            status_text = await response.text()
-            
-            if status_text.startswith("STATUS_OK"):
-                sms_code = status_text.split(":")[1]
-                await callback.message.edit_text(
-                    f"🎉 **СМС Код получен!**\n\nКод: `{sms_code}`\n\nСпасибо за покупку!",
-                    reply_markup=get_main_menu(),
-                    parse_mode="Markdown"
-                )
-            elif status_text == "STATUS_WAIT_CODE":
-                await callback.answer("⏳ СМС еще не пришло. Подождите немного и обновите еще раз.", show_alert=True)
-            else:
-                await callback.message.edit_text(f"Статус активации: {status_text}", reply_markup=get_main_menu())
-
-@dp.callback_query(F.data.startswith("cancel_"))
-async def cancel_sms_activation(callback: CallbackQuery):
-    data = callback.data.split("_")
