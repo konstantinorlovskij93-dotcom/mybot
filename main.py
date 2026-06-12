@@ -1,4 +1,3 @@
-
 import os
 import logging
 import sqlite3
@@ -158,7 +157,7 @@ async def create_payment(callback: CallbackQuery):
                     parse_mode="Markdown"
                 )
             else:
-                await callback.message.answer("⚠️ Не удалось создать счет. Проверьте правильность CRYPTO_BOT_TOKEN в Render.")
+                await callback.message.answer("⚠️ Не удалось создать счет. Проверьте правильность CRYPTO_BOT_TOKEN in Render.")
 
 @dp.callback_query(F.data.startswith("check_"))
 async def check_payment_status(callback: CallbackQuery):
@@ -170,60 +169,60 @@ async def check_payment_status(callback: CallbackQuery):
     
     async with aiohttp.ClientSession() as session:
         async with session.get("https://cryptobot.app", params=params, headers=headers) as resp:
-            result = await resp.json()
-            
-            if result.get("ok") and result["result"]["items"]:
-                crypto_invoice = result["result"]["items"][0]
-                
-                # Если статус счета в CryptoBot равен 'paid' (оплачен)
-                if crypto_invoice["status"] == "paid":
-                    conn = sqlite3.connect("database.db")
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT user_id, amount, status FROM invoices WHERE invoice_id = ?", (crypto_invoice_id,))
-                    local_invoice = cursor.fetchone()
+            try:
+                result = await resp.json()
+                if result.get("ok") and result["result"]["items"]:
+                    crypto_invoice = result["result"]["items"][0]
                     
-                    if local_invoice and local_invoice[2] == 'pending':
-                        user_id = local_invoice[0]
-                        amount_rub = local_invoice[1]
+                    # Если статус счета в CryptoBot равен 'paid' (оплачен)
+                    if crypto_invoice["status"] == "paid":
+                        conn = sqlite3.connect("database.db")
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT user_id, amount, status FROM invoices WHERE invoice_id = ?", (crypto_invoice_id,))
+                        local_invoice = cursor.fetchone()
                         
-                        # Обновляем статус в нашей базе, чтобы не начислить дважды
-                        cursor.execute("UPDATE invoices SET status = 'success' WHERE invoice_id = ?", (crypto_invoice_id,))
-                        conn.commit()
-                        conn.close()
-                        
-                        # Начисляем рубли на баланс бота
-                        add_balance(user_id, amount_rub)
-                        await callback.answer("✅ Оплата получена! Баланс успешно пополнен.", show_alert=True)
-                        await show_profile(callback)
+                        if local_invoice and local_invoice[2] == 'pending':
+                            user_id = local_invoice[0]
+                            amount_rub = local_invoice[1]
+                            
+                            # Обновляем статус в нашей базе, чтобы не начислить дважды
+                            cursor.execute("UPDATE invoices SET status = 'success' WHERE invoice_id = ?", (crypto_invoice_id,))
+                            conn.commit()
+                            
+                            # Начисляем рубли на баланс бота
+                            cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount_rub, user_id))
+                            conn.commit()
+                            conn.close()
+                            
+                            await callback.answer("✅ Баланс успешно пополнен!", show_alert=True)
+                            await show_profile(callback)
+                        else:
+                            conn.close()
+                            await callback.answer("ℹ️ Этот счет уже был обработан.", show_alert=True)
                     else:
-                        conn.close()
-                        await callback.answer("Этот счет уже был обработан.", show_alert=True)
+                        await callback.answer("❌ Счет еще не оплачен.", show_alert=True)
                 else:
-                    await callback.answer("⏳ Счет еще не оплачен. Сначала проведите платеж в CryptoBot.", show_alert=True)
-            else:
-                await callback.answer("❌ Ошибка проверки платежа.", show_alert=True)
+                    await callback.answer("⚠️ Ошибка проверки статуса инвойса.", show_alert=True)
+            except Exception as e:
+                logging.error(f"Error checking payment: {e}")
+                await callback.answer("⚠️ Произошла ошибка на сервере при проверке оплаты.", show_alert=True)
 
+# Имитация других кнопок, чтобы бот не выдавал ошибок при нажатии
 @dp.callback_query(F.data == "buy_number")
-async def choose_service(callback: CallbackQuery):
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✈️ Telegram (35 руб.)", callback_query_data="order_tg_35")],
-        [InlineKeyboardButton(text="💬 WhatsApp (25 руб.)", callback_query_data="order_wa_25")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_query_data="main_menu")]
-    ])
-    await callback.message.edit_text("Выберите сервис для покупки номера:", reply_markup=kb)
+async def buy_number_mock(callback: CallbackQuery):
+    await callback.answer("📱 Функция покупки номеров в разработке.", show_alert=True)
 
-@dp.callback_query(F.data.startswith("order_"))
-async def buy_sms_number(callback: CallbackQuery):
-    data = callback.data.split("_")
-    service_code = data[1]  
-    price = float(data[2])  
+@dp.callback_query(F.data == "help")
+async def help_mock(callback: CallbackQuery):
+    await callback.answer("ℹ️ Инструкция скоро появится здесь.", show_alert=True)
+
+# --- ЗАПУСК ВЕБ-СЕРВЕРА ДЛЯ ВЕБХУКОВ НА RENDER ---
+async def on_startup(bot: Bot):
+    await bot.set_webhook(WEBHOOK_URL)
+    logging.info(f"Webhook set to: {WEBHOOK_URL}")
+
+def main():
+    app = web.Application()
     
-    user = get_user(callback.from_user.id)
-    if user[2] < price:
-        await callback.answer("❌ Недостаточно средств на балансе! Пополните профиль.", show_alert=True)
-        return
-        
-    await callback.answer("Запрашиваем номер у SMS Hero...", show_alert=False)
-    url = f"{SMS_BASE_URL}?api_key={SMS_API_KEY}&action=getNumber&service={service_code}&country=0"
-    
-    try:
+    # Настройка роутера вебхуков
+    webhook_requests_handler = SimpleRequestHandler(
