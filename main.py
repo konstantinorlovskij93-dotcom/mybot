@@ -1,3 +1,5 @@
+
+    
 import os
 import logging
 import sqlite3
@@ -16,9 +18,9 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 RENDER_URL = os.getenv("RENDER_EXTERNAL_URL", "https://your-local-or-render-url.com") 
 
-# НАСТРОЙКИ SMSHELP
+# НАСТРОЙКИ SMS HERO (ИСПРАВЛЕНО)
 SMS_API_KEY = os.getenv("SMS_API_KEY")
-SMS_BASE_URL = "https://smshelp.me" 
+SMS_BASE_URL = "https://smshero.ru" 
 
 WEBHOOK_PATH = "/webhook"
 WEBHOOK_URL = f"{RENDER_URL.rstrip('/')}{WEBHOOK_PATH}"
@@ -60,6 +62,10 @@ def get_user(user_id, username=""):
         conn.commit()
         user = (user_id, username, 0.0)
     conn.close()
+    return user
+
+def get_user_balance(user_id):
+    user = get_user(user_id)
     return user[2]
 
 def add_balance(user_id, amount):
@@ -83,7 +89,7 @@ def get_main_menu():
 async def cmd_start(message: Message):
     get_user(message.from_user.id, message.from_user.username)
     await message.answer(
-        "👋 Добро пожаловать в **SMSHelp Bot**!\n\n"
+        "👋 Добро пожаловать в **SMSHero Bot**!\n\n"
         "Здесь вы можете купить виртуальные номера для приема СМС-активаций.",
         reply_markup=get_main_menu(),
         parse_mode="Markdown"
@@ -91,12 +97,12 @@ async def cmd_start(message: Message):
 
 @dp.callback_query(F.data == "main_menu")
 async def back_to_menu(callback: CallbackQuery):
-    await callback.message.edit_text("👋 Главное меню SMSHelp:", reply_markup=get_main_menu())
+    await callback.message.edit_text("👋 Главное меню SMSHero:", reply_markup=get_main_menu())
 
 @dp.callback_query(F.data == "profile")
 async def show_profile(callback: CallbackQuery):
-    user_balance = get_user(callback.from_user.id)
-    text = f"👤 **Ваш профиль:**\n├ ID: `{callback.from_user.id}`\n└ Баланс: **{user_balance} руб.**"
+    balance = get_user_balance(callback.from_user.id)
+    text = f"👤 **Ваш профиль:**\n├ ID: `{callback.from_user.id}`\n└ Баланс: **{balance} руб.**"
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💵 Пополнить баланс", callback_query_data="deposit")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_query_data="main_menu")]
@@ -138,10 +144,12 @@ async def check_payment(callback: CallbackQuery):
     invoice = cursor.fetchone()
     
     if invoice and invoice[2] == 'pending':
+        user_id = invoice[0]
+        amount = invoice[1]
         cursor.execute("UPDATE invoices SET status = 'success' WHERE invoice_id = ?", (invoice_id,))
         conn.commit()
         conn.close()
-        add_balance(invoice[0], invoice[1])
+        add_balance(user_id, amount)
         await callback.answer("✅ Баланс успешно пополнен!", show_alert=True)
         await show_profile(callback)
     else:
@@ -163,12 +171,12 @@ async def buy_sms_number(callback: CallbackQuery):
     service_code = data[1]  
     price = float(data[2])  
     
-    user_balance = get_user(callback.from_user.id)
-    if user_balance < price:
+    balance = get_user_balance(callback.from_user.id)
+    if balance < price:
         await callback.answer("❌ Недостаточно средств на балансе!", show_alert=True)
         return
         
-    await callback.answer("Запрашиваем номер у SMSHelp...", show_alert=False)
+    await callback.answer("Запрашиваем номер у SMS Hero...", show_alert=False)
     
     url = f"{SMS_BASE_URL}?api_key={SMS_API_KEY}&action=getNumber&service={service_code}&country=0"
     
@@ -200,7 +208,7 @@ async def buy_sms_number(callback: CallbackQuery):
                     ])
                     await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
                 else:
-                    await callback.message.answer(f"⚠️ Ошибка сервиса SMSHelp: {response_text}. Возможно, нет доступных номеров.")
+                    await callback.message.answer(f"⚠️ Ошибка сервиса SMS Hero: {response_text}. Возможно, нет доступных номеров.")
     except Exception as e:
         logging.error(f"Ошибка API: {e}")
         await callback.message.answer("💥 Произошла ошибка при связи с СМС-сервисом.")
@@ -231,6 +239,3 @@ async def check_sms_status(callback: CallbackQuery):
 @dp.callback_query(F.data.startswith("cancel_"))
 async def cancel_sms_activation(callback: CallbackQuery):
     data = callback.data.split("_")
-    activation_id = data[1]
-    price = float(data[2])
-    
