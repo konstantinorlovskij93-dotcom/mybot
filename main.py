@@ -116,12 +116,14 @@ async def choose_deposit_amount(callback: CallbackQuery):
 
 @dp.callback_query(F.data.startswith("pay_"))
 async def create_payment(callback: CallbackQuery):
-    amount_rub = int(callback.data.split("_")[1])
-    
-    # Конвертируем рубли в доллары для CryptoBot (примерный курс 1$ = 92 руб)
+    parts = callback.data.split("_")
+    if len(parts) < 2:
+        await callback.answer("⚠️ Ошибка создания платежа.", show_alert=True)
+        return
+        
+    amount_rub = int(parts[1])
     amount_usd = round(amount_rub / 92.0, 2)
     
-    # Создаем инвойс через API CryptoBot
     headers = {"Crypto-Pay-API-Token": CRYPTO_BOT_TOKEN}
     payload = {
         "amount": str(amount_usd),
@@ -138,7 +140,6 @@ async def create_payment(callback: CallbackQuery):
                 pay_url = invoice_data["bot_invoice_url"]
                 crypto_invoice_id = str(invoice_data["invoice_id"])
                 
-                # Сохраняем информацию в нашу локальную БД
                 conn = sqlite3.connect("database.db")
                 cursor = conn.cursor()
                 cursor.execute("INSERT INTO invoices (invoice_id, user_id, amount) VALUES (?, ?, ?)", (crypto_invoice_id, callback.from_user.id, amount_rub))
@@ -157,13 +158,16 @@ async def create_payment(callback: CallbackQuery):
                     parse_mode="Markdown"
                 )
             else:
-                await callback.message.answer("⚠️ Не удалось создать счет. Проверьте правильность CRYPTO_BOT_TOKEN in Render.")
+                await callback.message.answer("⚠️ Не удалось создать счет. Проверьте правильность CRYPTO_BOT_TOKEN в Render.")
 
 @dp.callback_query(F.data.startswith("check_"))
 async def check_payment_status(callback: CallbackQuery):
-    crypto_invoice_id = callback.data.split("_")[1]
-    
-    # Запрашиваем статус счета у CryptoBot API
+    parts = callback.data.split("_")
+    if len(parts) < 2:
+        await callback.answer("⚠️ Ошибка проверки.", show_alert=True)
+        return
+        
+    crypto_invoice_id = parts[1]
     headers = {"Crypto-Pay-API-Token": CRYPTO_BOT_TOKEN}
     params = {"invoice_ids": crypto_invoice_id}
     
@@ -174,7 +178,6 @@ async def check_payment_status(callback: CallbackQuery):
                 if result.get("ok") and result["result"]["items"]:
                     crypto_invoice = result["result"]["items"][0]
                     
-                    # Если статус счета в CryptoBot равен 'paid' (оплачен)
                     if crypto_invoice["status"] == "paid":
                         conn = sqlite3.connect("database.db")
                         cursor = conn.cursor()
@@ -185,11 +188,7 @@ async def check_payment_status(callback: CallbackQuery):
                             user_id = local_invoice[0]
                             amount_rub = local_invoice[1]
                             
-                            # Обновляем статус в нашей базе, чтобы не начислить дважды
                             cursor.execute("UPDATE invoices SET status = 'success' WHERE invoice_id = ?", (crypto_invoice_id,))
-                            conn.commit()
-                            
-                            # Начисляем рубли на баланс бота
                             cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount_rub, user_id))
                             conn.commit()
                             conn.close()
@@ -207,7 +206,6 @@ async def check_payment_status(callback: CallbackQuery):
                 logging.error(f"Error checking payment: {e}")
                 await callback.answer("⚠️ Произошла ошибка на сервере при проверке оплаты.", show_alert=True)
 
-# Имитация других кнопок, чтобы бот не выдавал ошибок при нажатии
 @dp.callback_query(F.data == "buy_number")
 async def buy_number_mock(callback: CallbackQuery):
     await callback.answer("📱 Функция покупки номеров в разработке.", show_alert=True)
@@ -223,6 +221,13 @@ async def on_startup(bot: Bot):
 
 def main():
     app = web.Application()
+    webhook_requests_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
+    webhook_requests_handler.register(app, path=WEBHOOK_PATH)
+    setup_application(app, dp, bot=bot)
+    dp.startup.register(on_startup)
     
-    # Настройка роутера вебхуков
-    webhook_requests_handler = SimpleRequestHandler(
+    port = int(os.getenv("PORT", 10000))
+    web.run_app(app, host="0.0.0.0", port=port)
+
+if __name__ == "__main__":
+    main()
