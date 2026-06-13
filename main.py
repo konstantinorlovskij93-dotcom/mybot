@@ -1,7 +1,6 @@
 import os
 import logging
 import sqlite3
-import uuid
 import aiohttp
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, F
@@ -15,10 +14,6 @@ load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 RENDER_URL = os.getenv("RENDER_EXTERNAL_URL", "https://your-local-or-render-url.com") 
-
-# НАСТРОЙКИ SMS HERO
-SMS_API_KEY = os.getenv("SMS_API_KEY")
-SMS_BASE_URL = "https://smshero.ru" 
 
 # НАСТРОЙКИ CRYPTOBOT
 CRYPTO_BOT_TOKEN = os.getenv("CRYPTO_BOT_TOKEN")
@@ -65,13 +60,6 @@ def get_user(user_id, username=""):
     conn.close()
     return user
 
-def add_balance(user_id, amount):
-    conn = sqlite3.connect("database.db")
-    cursor = conn.cursor()
-    cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, user_id))
-    conn.commit()
-    conn.close()
-
 # --- ИНТЕРФЕЙС / КНОПКИ ---
 def get_main_menu():
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -97,6 +85,7 @@ async def back_to_menu(callback: CallbackQuery):
 @dp.callback_query(F.data == "profile")
 async def show_profile(callback: CallbackQuery):
     user = get_user(callback.from_user.id)
+    # ИСПРАВЛЕНО: Теперь баланс берется строго как число из базы (индекс 2)
     text = f"👤 **Ваш профиль:**\n├ ID: `{callback.from_user.id}`\n└ Баланс: **{user[2]} руб.**"
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💵 Пополнить баланс", callback_query_data="deposit")],
@@ -201,33 +190,21 @@ async def check_payment_status(callback: CallbackQuery):
                 logging.error(f"Ошибка проверки платежа: {e}")
                 await callback.answer("⚠️ Произошла ошибка при проверке.", show_alert=True)
 
-# --- ДОБАВЛЕННЫЙ БЛОК ДЛЯ ИСПРАВЛЕНИЯ ОШИБКИ 404 (UPTIMEROBOT) ---
+# --- БЛОК ДЛЯ СВЯЗИ С UPTIMEROBOT ---
 async def handle_root(request):
-    """Ответ для UptimeRobot, чтобы он видел статус 200 OK вместо 404"""
     return web.Response(text="Бот запущен и работает! Статус: 200 OK", status=200)
 
 async def on_startup(app):
-    """Функция, которая автоматически ставит вебхук в Telegram при старте сервера"""
-    await bot.set_webhook(url=WEBHOOK_URL)
+    await bot.set_webhook(url=WEBHOOK_URL, drop_pending_updates=True)
 
 async def init_app():
-    """Сборка aiohttp веб-приложения со всеми путями"""
     app = web.Application()
-    
-    # Главная страница (для проверок UptimeRobot)
     app.router.add_get("/", handle_root)
-    
-    # Страница вебхука (для сообщений из Telegram)
     SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
-    
-    # Настройка привязки контекста aiogram к серверу
     setup_application(app, dp, bot=bot)
-    
-    # Подключаем функцию активации вебхука к старту приложения
     app.on_startup.append(on_startup)
     return app
 
 if __name__ == "__main__":
-    # Запуск сервера на порту, который выдает хостинг Render
     port = int(os.getenv("PORT", 8080))
     web.run_app(init_app(), host="0.0.0.0", port=port)
