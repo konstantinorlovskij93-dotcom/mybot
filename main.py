@@ -192,42 +192,42 @@ async def check_payment_status(callback: CallbackQuery):
                             cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount_rub, user_id))
                             conn.commit()
                             conn.close()
-                            
                             await callback.answer("✅ Баланс успешно пополнен!", show_alert=True)
-                            await show_profile(callback)
                         else:
-                            conn.close()
-                            await callback.answer("ℹ️ Этот счет уже был обработан.", show_alert=True)
+                            await callback.answer("⚠️ Этот счет уже обработан.", show_alert=True)
                     else:
                         await callback.answer("❌ Счет еще не оплачен.", show_alert=True)
-                else:
-                    await callback.answer("⚠️ Ошибка проверки статуса инвойса.", show_alert=True)
             except Exception as e:
-                logging.error(f"Error checking payment: {e}")
-                await callback.answer("⚠️ Произошла ошибка на сервере при проверке оплаты.", show_alert=True)
+                logging.error(f"Ошибка проверки платежа: {e}")
+                await callback.answer("⚠️ Произошла ошибка при проверке.", show_alert=True)
 
-@dp.callback_query(F.data == "buy_number")
-async def buy_number_mock(callback: CallbackQuery):
-    await callback.answer("📱 Функция покупки номеров в разработке.", show_alert=True)
+# --- ДОБАВЛЕННЫЙ БЛОК ДЛЯ ИСПРАВЛЕНИЯ ОШИБКИ 404 (UPTIMEROBOT) ---
+async def handle_root(request):
+    """Ответ для UptimeRobot, чтобы он видел статус 200 OK вместо 404"""
+    return web.Response(text="Бот запущен и работает! Статус: 200 OK", status=200)
 
-@dp.callback_query(F.data == "help")
-async def help_mock(callback: CallbackQuery):
-    await callback.answer("ℹ️ Инструкция скоро появится здесь.", show_alert=True)
+async def on_startup(app):
+    """Функция, которая автоматически ставит вебхук в Telegram при старте сервера"""
+    await bot.set_webhook(url=WEBHOOK_URL)
 
-# --- ЗАПУСК ВЕБ-СЕРВЕРА ДЛЯ ВЕБХУКОВ НА RENDER ---
-async def on_startup(bot: Bot):
-    await bot.set_webhook(WEBHOOK_URL)
-    logging.info(f"Webhook set to: {WEBHOOK_URL}")
-
-def main():
+async def init_app():
+    """Сборка aiohttp веб-приложения со всеми путями"""
     app = web.Application()
-    webhook_requests_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
-    webhook_requests_handler.register(app, path=WEBHOOK_PATH)
-    setup_application(app, dp, bot=bot)
-    dp.startup.register(on_startup)
     
-    port = int(os.getenv("PORT", 10000))
-    web.run_app(app, host="0.0.0.0", port=port)
+    # Главная страница (для проверок UptimeRobot)
+    app.router.add_get("/", handle_root)
+    
+    # Страница вебхука (для сообщений из Telegram)
+    SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
+    
+    # Настройка привязки контекста aiogram к серверу
+    setup_application(app, dp, bot=bot)
+    
+    # Подключаем функцию активации вебхука к старту приложения
+    app.on_startup.append(on_startup)
+    return app
 
 if __name__ == "__main__":
-    main()
+    # Запуск сервера на порту, который выдает хостинг Render
+    port = int(os.getenv("PORT", 8080))
+    web.run_app(init_app(), host="0.0.0.0", port=port)
