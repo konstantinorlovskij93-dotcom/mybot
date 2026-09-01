@@ -98,7 +98,7 @@ async def choose_deposit_amount(callback: CallbackQuery):
     ])
     await callback.message.edit_text("Выберите сумму в рублях для пополнения через CryptoBot:", reply_markup=kb)
 
-# --- НОВЫЕ ИСПРАВЛЕННЫЕ КОМАНДЫ ---
+# --- НОВЫЕ ИСПРАВЛЕННЫЕ КОМАНДЫ ДЛЯ ВАШЕГО МЕНЮ ---
 
 @dp.message(Command("call"))
 async def call_cmd(message: Message):
@@ -135,7 +135,7 @@ async def handle_chat_buttons(message: Message):
     elif message.text == "❌ Выйти из чата":
         await message.answer("🚪 Вы успешно вышли из секретного чата.")
 
-# --- ПОЛНАЯ ОРИГИНАЛЬНАЯ ЛОГИКА CRYPTOBOT С ВАШИХ СКРИНШОТОВ ---
+# --- ПОЛНАЯ ИСПРАВЛЕННАЯ ЛОГИКА CRYPTOBOT С УЧЕТОМ СИНТАКСИСА ---
 
 @dp.callback_query(F.data.startswith("pay_"))
 async def create_payment(callback: CallbackQuery):
@@ -211,11 +211,9 @@ async def check_payment_status(callback: CallbackQuery):
                 logging.error(f"Ошибка проверки платежа: {e}")
                 await callback.answer("⚠️ Произошла ошибка при проверке.")
 
-# --- СЛУЖЕБНЫЙ БЛОК ВЕВХУКОВ ---
+# --- СЛУЖЕБНЫЙ БЛОК ВЕБХУКОВ ДЛЯ RENDER ---
 async def handle_root(request):
     return web.Response(text="Бот запущен и работает! Статус: 200 OK", status=200)
 
 async def on_startup(app):
     await bot.set_webhook(url=WEBHOOK_URL, drop_pending_updates=True)
-
-async def init_app():
