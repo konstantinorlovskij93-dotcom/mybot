@@ -21,6 +21,7 @@ WEBHOOK_URL = f"{RENDER_URL}{WEBHOOK_PATH}"
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
+# --- БАЗА ДАННЫХ ---
 def init_db():
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
@@ -56,6 +57,7 @@ def get_user(user_id, username=""):
     conn.close()
     return user
 
+# --- МЕНЮ И КНОПКИ ---
 def get_main_menu():
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🛒 Купить номер", callback_data="buy_number")],
@@ -81,7 +83,8 @@ async def back_to_menu(callback: CallbackQuery):
 @dp.callback_query(F.data == "profile")
 async def show_profile(callback: CallbackQuery):
     user = get_user(callback.from_user.id)
-    text = f"👤 **Ваш профиль:**\n\n💵 Баланс: {user[2]} руб."
+    balance_val = user[2]
+    text = f"👤 **Ваш профиль:**\n\n💵 Баланс: {balance_val} руб."
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💳 Пополнить баланс", callback_data="deposit")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")]
@@ -98,7 +101,7 @@ async def choose_deposit_amount(callback: CallbackQuery):
     ])
     await callback.message.edit_text("Выберите сумму в рублях для пополнения через CryptoBot:", reply_markup=kb)
 
-# --- НОВЫЕ ИСПРАВЛЕННЫЕ КОМАНДЫ ДЛЯ ВАШЕГО МЕНЮ ---
+# --- НОВЫЕ КОМАНДЫ ДЛЯ ЗВОНКОВ И ЧАТА ---
 
 @dp.message(Command("call"))
 async def call_cmd(message: Message):
@@ -116,14 +119,14 @@ async def chat_menu_cmd(message: Message):
         ],
         resize_keyboard=True, one_time_keyboard=True
     )
-    await message.answer("💬 Управление секретным чатом. Выберите действие:", reply_markup=markup)
+    await message.answer("💬 Управление секретным чатом. Выберите действие на кнопках ниже:", reply_markup=markup)
 
 @dp.message(Command("share"))
 async def share_cmd(message: Message):
     user_id = message.from_user.id
     bot_info = await bot.get_me()
     ref_url = f"https://t.me{bot_info.username}?start={user_id}"
-    await message.answer(f"👑 **Ваша персональная реферальная ссылка:**\n{ref_url}\n\nПересылайте ссылку друзьям!", parse_mode="Markdown")
+    await message.answer(f"👑 **Ваша персональная реферальная ссылка:**\n{ref_url}\n\nПересылайте ссылку друзьям! Она станет частью вашей команды PolyCall.", parse_mode="Markdown")
 
 @dp.message(F.text.in_({"➕ Создать комнату чата", "🚪 Войти в комнату", "❌ Выйти из чата"}))
 async def handle_chat_buttons(message: Message):
@@ -135,7 +138,7 @@ async def handle_chat_buttons(message: Message):
     elif message.text == "❌ Выйти из чата":
         await message.answer("🚪 Вы успешно вышли из секретного чата.")
 
-# --- ПОЛНАЯ ИСПРАВЛЕННАЯ ЛОГИКА CRYPTOBOT С УЧЕТОМ СИНТАКСИСА ---
+# --- СИСТЕМА ОПЛАТЫ CRYPTOBOT ---
 
 @dp.callback_query(F.data.startswith("pay_"))
 async def create_payment(callback: CallbackQuery):
@@ -211,9 +214,7 @@ async def check_payment_status(callback: CallbackQuery):
                 logging.error(f"Ошибка проверки платежа: {e}")
                 await callback.answer("⚠️ Произошла ошибка при проверке.")
 
-# --- СЛУЖЕБНЫЙ БЛОК ВЕБХУКОВ ДЛЯ RENDER ---
+# --- СЛУЖЕБНЫЙ БЛОК ВЕБХУКОВ RENDER ---
 async def handle_root(request):
     return web.Response(text="Бот запущен и работает! Статус: 200 OK", status=200)
 
-async def on_startup(app):
-    await bot.set_webhook(url=WEBHOOK_URL, drop_pending_updates=True)
