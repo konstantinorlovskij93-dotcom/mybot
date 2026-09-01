@@ -83,7 +83,7 @@ async def back_to_menu(callback: CallbackQuery):
 @dp.callback_query(F.data == "profile")
 async def show_profile(callback: CallbackQuery):
     user = get_user(callback.from_user.id)
-    balance_val = user[2]
+    balance_val = user[2] if user else 0.0
     text = f"👤 **Ваш профиль:**\n\n💵 Баланс: {balance_val} руб."
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💳 Пополнить баланс", callback_data="deposit")],
@@ -101,7 +101,7 @@ async def choose_deposit_amount(callback: CallbackQuery):
     ])
     await callback.message.edit_text("Выберите сумму в рублях для пополнения через CryptoBot:", reply_markup=kb)
 
-# --- НОВЫЕ КОМАНДЫ ДЛЯ ЗВОНКОВ И ЧАТА ---
+# --- ДОБАВЛЕННЫЕ КОМАНДЫ ДЛЯ ЗВОНКОВ И ЧАТА ---
 
 @dp.message(Command("call"))
 async def call_cmd(message: Message):
@@ -214,7 +214,5 @@ async def check_payment_status(callback: CallbackQuery):
                 logging.error(f"Ошибка проверки платежа: {e}")
                 await callback.answer("⚠️ Произошла ошибка при проверке.")
 
-# --- СЛУЖЕБНЫЙ БЛОК ВЕБХУКОВ RENDER ---
+# --- СЛУЖЕБНЫЙ БЛОК ВЕБХУКОВ ---
 async def handle_root(request):
-    return web.Response(text="Бот запущен и работает! Статус: 200 OK", status=200)
-
