@@ -59,7 +59,7 @@ def init_db():
 
 init_db()
 
-def register_user(user_id, username, referrer_id=NULL):
+def register_user(user_id, username, referrer_id=None):
     conn = sqlite3.connect("bot_data.db")
     cursor = conn.cursor()
     cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
@@ -91,19 +91,19 @@ def get_stats():
     conn = sqlite3.connect("bot_data.db")
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM users")
-    total_users = cursor.fetchone()[0]
+    total_users = cursor.fetchone()
     conn.close()
-    return total_users
+    return total_users[0] if total_users else 0
 
 def get_all_users():
     conn = sqlite3.connect("bot_data.db")
     cursor = conn.cursor()
     cursor.execute("SELECT user_id FROM users")
-    users = [row[0] for row in cursor.fetchall()]
+    rows = cursor.fetchall()
     conn.close()
-    return users
+    return [row[0] for row in rows]
 
-# --- ИИ ПЕРЕВОДЧИК ---
+# --- БЕСПЛАТНЫЙ ИИ ПЕРЕВОДЧИК ---
 async def translate_text(text: str, target_lang: str) -> str:
     url = f"https://googleapis.com{target_lang}&dt=t&q={text}"
     try:
@@ -111,7 +111,8 @@ async def translate_text(text: str, target_lang: str) -> str:
             async with session.get(url) as response:
                 if response.status == 200:
                     result = await response.json()
-                    return "".join([part[0] for part in result[0] if part[0]])
+                    if result and result[0]:
+                        return "".join([part[0] for part in result[0] if part[0]])
     except Exception as e:
         logging.error(f"Ошибка ИИ перевода: {e}")
     return text
@@ -127,7 +128,6 @@ def get_main_menu():
 
 def get_languages_keyboard():
     buttons = []
-    # Делаем удобные кнопки в 2 ряда
     row = []
     for lang_name, lang_code in LANGUAGES.items():
         row.append(InlineKeyboardButton(text=lang_name.split()[0], callback_data=f"setlang_{lang_code}"))
@@ -144,22 +144,18 @@ def get_languages_keyboard():
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
     
-    # Реферальный код из ссылки
     args = message.text.split()
     referrer_id = int(args[1]) if len(args) > 1 and args[1].isdigit() else None
     
     register_user(message.from_user.id, message.from_user.username, referrer_id)
     
-    bot_info = await bot.get_me()
-    ref_link = f"https://t.me{bot_info.username}?start={message.from_user.id}"
-    
     welcome_text = (
         "🔥 **Добро пожаловать в будущее коммуникаций!** 🔥\n\n"
         "🤖 **AI Translation Bridge** — это первый в мире умный мост-переводчик, стирающий любые языковые границы в реальном времени!\n\n"
         "💡 **Как это работает:**\n"
-        "Вы общаетесь в этом чате на своем языке, а ваш собеседник получает сообщения уже переведенными на его родной язык! Без барьеров, задержек и недопониманий.\n\n"
+        "Вы общаетесь в этом чате на своем языке, а ваш собеседник получает сообщения уже переведенными на его родной язык!\n\n"
         f"🆔 **Твой личный ID:** `{message.from_user.id}`\n"
-        "Поделись этим ID с иностранным другом, чтобы запустить синхронный перевод чата.\n\n"
+        "Поделись этим ID с иностранным другом, чтобы запустить перевод чата.\n\n"
         "🚀 Выбери язык и начни общение нового уровня прямо сейчас!"
     )
     await message.answer(welcome_text, reply_markup=get_main_menu(), parse_mode="Markdown")
@@ -178,7 +174,8 @@ async def show_ref(callback: CallbackQuery):
     conn = sqlite3.connect("bot_data.db")
     cursor = conn.cursor()
     cursor.execute("SELECT ref_count FROM users WHERE user_id = ?", (callback.from_user.id,))
-    refs = cursor.fetchone()[0]
+    row = cursor.fetchone()
+    refs = row[0] if row else 0
     conn.close()
     
     text = (
@@ -225,7 +222,7 @@ async def establish_connection(message: Message, state: FSMContext):
     await message.answer(
         f"🤝 **Синхронный перевод активирован!**\n\n"
         f"Пиши сообщения на своем языке — собеседник `{target_id}` получит их уже переведенными.\n"
-        f" Чтобы выйти из режима перевода чата, отправь команду `/stop`.",
+        f"Чтобы выйти из режима перевода чата, отправь команду `/stop`.",
         parse_mode="Markdown"
     )
 
@@ -250,3 +247,5 @@ async def handle_chat_text(message: Message, state: FSMContext):
     try:
         await bot.send_message(
             chat_id=partner_id,
+            text=f"🌐 **[Перевод]:** {translated_text}"
+        )
