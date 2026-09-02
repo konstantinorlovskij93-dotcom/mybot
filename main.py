@@ -2,30 +2,23 @@ import os
 import logging
 import sqlite3
 import uuid
-import aiohttp
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import CommandStart
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
-from aiohttp import web
+import aiohttp
 
+# Настройка логирования
 logging.basicConfig(level=logging.INFO)
 load_dotenv()
 
+# Инициализация токенов из окружения
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-RENDER_URL = os.getenv("RENDER_EXTERNAL_URL", "https://your-local-or-render-url.com") 
-
-# НАСТРОЙКИ SMS HERO
 SMS_API_KEY = os.getenv("SMS_API_KEY")
-SMS_BASE_URL = "https://smshero.ru" 
-
-# НАСТРОЙКИ CRYPTOBOT
+SMS_BASE_URL = "https://smshero.ru"
 CRYPTO_BOT_TOKEN = os.getenv("CRYPTO_BOT_TOKEN")
 
-WEBHOOK_PATH = "/webhook"
-WEBHOOK_URL = f"{RENDER_URL.rstrip('/')}{WEBHOOK_PATH}"
-
+# Инициализация бота и диспетчера
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
@@ -59,7 +52,7 @@ def get_user(user_id, username=""):
     cursor.execute("SELECT user_id, username, balance FROM users WHERE user_id = ?", (user_id,))
     user = cursor.fetchone()
     if not user:
-        cursor.execute("INSERT INTO users (user_id, username, balance) VALUES (?, ?, ?)", (user_id, username, 0.0))
+        cursor.execute("INSERT INTO users (user_id, username, balance) VALUES (?, ?, 0.0)", (user_id, username))
         conn.commit()
         user = (user_id, username, 0.0)
     conn.close()
@@ -75,9 +68,9 @@ def add_balance(user_id, amount):
 # --- ИНТЕРФЕЙС / КНОПКИ ---
 def get_main_menu():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📱 Купить номер", callback_query_data="buy_number")],
-        [InlineKeyboardButton(text="💰 Профиль / Пополнить", callback_query_data="profile")],
-        [InlineKeyboardButton(text="ℹ️ Инструкция", callback_query_data="help")]
+        [InlineKeyboardButton(text="🛒 Купить номер", callback_data="buy_number")],
+        [InlineKeyboardButton(text="👤 Профиль / Пополнить", callback_data="profile")],
+        [InlineKeyboardButton(text="ℹ️ Инструкция", callback_data="help")]
     ])
 
 @dp.message(CommandStart())
@@ -92,25 +85,25 @@ async def cmd_start(message: Message):
 
 @dp.callback_query(F.data == "main_menu")
 async def back_to_menu(callback: CallbackQuery):
-    await callback.message.edit_text("👋 Главное меню SMSHero:", reply_markup=get_main_menu())
+    await callback.message.edit_text("🔝 Главное меню SMSHero:", reply_markup=get_main_menu())
 
 @dp.callback_query(F.data == "profile")
 async def show_profile(callback: CallbackQuery):
     user = get_user(callback.from_user.id)
-    text = f"👤 **Ваш профиль:**\n├ ID: `{callback.from_user.id}`\n└ Баланс: **{user[2]} руб.**"
+    text = f"👤 **Ваш профиль:**\n\n🆔 ID: `{callback.from_user.id}`\n💰 Баланс: **{user[2]} руб.**"
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💵 Пополнить баланс", callback_query_data="deposit")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_query_data="main_menu")]
+        [InlineKeyboardButton(text="💳 Пополнить баланс", callback_data="deposit")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")]
     ])
     await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
 
 @dp.callback_query(F.data == "deposit")
 async def choose_deposit_amount(callback: CallbackQuery):
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="➕ 100 руб. (~1.1 USDT)", callback_query_data="pay_100")],
-        [InlineKeyboardButton(text="➕ 300 руб. (~3.3 USDT)", callback_query_data="pay_300")],
-        [InlineKeyboardButton(text="➕ 500 руб. (~5.5 USDT)", callback_query_data="pay_500")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_query_data="profile")]
+        [InlineKeyboardButton(text="🔹 100 руб. (~1.1 USDT)", callback_data="pay_100")],
+        [InlineKeyboardButton(text="🔹 300 руб. (~3.3 USDT)", callback_data="pay_300")],
+        [InlineKeyboardButton(text="🔹 500 руб. (~5.5 USDT)", callback_data="pay_500")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="profile")]
     ])
     await callback.message.edit_text("Выберите сумму в рублях для пополнения баланса (оплата в USDT/крипте):", reply_markup=kb)
 
@@ -120,7 +113,7 @@ async def create_payment(callback: CallbackQuery):
     if len(parts) < 2:
         await callback.answer("⚠️ Ошибка создания платежа.", show_alert=True)
         return
-        
+    
     amount_rub = int(parts[1])
     amount_usd = round(amount_rub / 92.0, 2)
     
@@ -137,7 +130,7 @@ async def create_payment(callback: CallbackQuery):
             
             if result.get("ok"):
                 invoice_data = result["result"]
-                pay_url = invoice_data["bot_invoice_url"]
+                pay_url = invoice_data["pay_url"]
                 crypto_invoice_id = str(invoice_data["invoice_id"])
                 
                 conn = sqlite3.connect("database.db")
@@ -148,17 +141,17 @@ async def create_payment(callback: CallbackQuery):
                 
                 kb = InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="💸 Оплатить в CryptoBot", url=pay_url)],
-                    [InlineKeyboardButton(text="✅ Проверить оплату", callback_query_data=f"check_{crypto_invoice_id}")],
-                    [InlineKeyboardButton(text="⬅️ Назад", callback_query_data="profile")]
+                    [InlineKeyboardButton(text="🔄 Проверить оплату", callback_data=f"check_{crypto_invoice_id}")],
+                    [InlineKeyboardButton(text="⬅️ Назад", callback_data="profile")]
                 ])
                 
                 await callback.message.edit_text(
-                    f"💸 **Счет на пополнение успешно создан!**\n\nСумма к зачислению: **{amount_rub} руб.**\nСтоимость: **{amount_usd} USDT**\n\nНажмите кнопку ниже, оплатите счет в открывшемся CryptoBot, а затем вернитесь сюда и нажмите кнопку проверки.",
+                    f"🎰 **Счет на пополнение успешно создан!**\n\nСумма к зачислению: **{amount_rub} руб.** (~{amount_usd} USDT)",
                     reply_markup=kb,
                     parse_mode="Markdown"
                 )
             else:
-                await callback.message.answer("⚠️ Не удалось создать счет. Проверьте правильность CRYPTO_BOT_TOKEN в Render.")
+                await callback.answer("⚠️ Не удалось создать счет. Проверьте CRYPTO_BOT_TOKEN.", show_alert=True)
 
 @dp.callback_query(F.data.startswith("check_"))
 async def check_payment_status(callback: CallbackQuery):
@@ -184,50 +177,32 @@ async def check_payment_status(callback: CallbackQuery):
                         cursor.execute("SELECT user_id, amount, status FROM invoices WHERE invoice_id = ?", (crypto_invoice_id,))
                         local_invoice = cursor.fetchone()
                         
-                        if local_invoice and local_invoice[2] == 'pending':
-                            user_id = local_invoice[0]
-                            amount_rub = local_invoice[1]
-                            
-                            cursor.execute("UPDATE invoices SET status = 'success' WHERE invoice_id = ?", (crypto_invoice_id,))
-                            cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount_rub, user_id))
+                        if local_invoice and local_invoice[2] == "pending":
+                            user_id, amount_rub, _ = local_invoice
+                            cursor.execute("UPDATE invoices SET status = 'paid' WHERE invoice_id = ?", (crypto_invoice_id,))
                             conn.commit()
                             conn.close()
-                            await callback.answer("✅ Баланс успешно пополнен!", show_alert=True)
+                            
+                            add_balance(user_id, amount_rub)
+                            await callback.answer("✅ Оплата получена! Баланс пополнен.", show_alert=True)
+                            await show_profile(callback)
                         else:
-                            await callback.answer("⚠️ Этот счет уже обработан.", show_alert=True)
+                            await callback.answer("ℹ️ Этот счет уже был обработан.", show_alert=True)
                     else:
-                        await callback.answer("❌ Счет еще не оплачен.", show_alert=True)
+                        await callback.answer("⏳ Счет еще не оплачен.", show_alert=True)
+                else:
+                    await callback.answer("❌ Счет не найден в CryptoBot.", show_alert=True)
             except Exception as e:
                 logging.error(f"Ошибка проверки платежа: {e}")
-                await callback.answer("⚠️ Произошла ошибка при проверке.", show_alert=True)
+                await callback.answer("⚠️ Произошла ошибка при проверке. Попробуйте позже.")
 
-# --- ДОБАВЛЕННЫЙ БЛОК ДЛЯ ИСПРАВЛЕНИЯ ОШИБКИ 404 (UPTIMEROBOT) ---
-async def handle_root(request):
-    """Ответ для UptimeRobot, чтобы он видел статус 200 OK вместо 404"""
-    return web.Response(text="Бот запущен и работает! Статус: 200 OK", status=200)
-
-async def on_startup(app):
-    """Функция, которая автоматически ставит вебхук в Telegram при старте сервера"""
-    await bot.set_webhook(url=WEBHOOK_URL)
-
-async def init_app():
-    """Сборка aiohttp веб-приложения со всеми путями"""
-    app = web.Application()
-    
-    # Главная страница (для проверок UptimeRobot)
-    app.router.add_get("/", handle_root)
-    
-    # Страница вебхука (для сообщений из Telegram)
-    SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
-    
-    # Настройка привязки контекста aiogram к серверу
-    setup_application(app, dp, bot=bot)
-    
-    # Подключаем функцию активации вебхука к старту приложения
-    app.on_startup.append(on_startup)
-    return app
+# --- ЗАПУСК БОТА (Long Polling) ---
+async def main():
+    # Удаляем вебхук, если он был установлен ранее, чтобы включить Long Polling
+    await bot.delete_webhook(drop_pending_updates=True)
+    logging.info("Бот запущен в режиме Long Polling...")
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    # Запуск сервера на порту, который выдает хостинг Render
-    port = int(os.getenv("PORT", 8080))
-    web.run_app(init_app(), host="0.0.0.0", port=port)
+    import asyncio
+    asyncio.run(main())
