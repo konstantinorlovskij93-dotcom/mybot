@@ -245,7 +245,5 @@ async def handle_chat_text(message: Message, state: FSMContext):
     translated_text = await translate_text(message.text, target_lang)
     
     try:
-        await bot.send_message(
-            chat_id=partner_id,
-            text=f"🌐 **[Перевод]:** {translated_text}"
-        )
+        await bot.send_message(chat_id=partner_id, text=f"🌐 **[Перевод]:** {translated_text}")
+        await message.answer(f"✅ _Доставлено (Перевод: {translated_text})_", parse_mode="Markdown")
