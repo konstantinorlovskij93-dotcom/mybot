@@ -130,7 +130,7 @@ def get_languages_keyboard():
     buttons = []
     row = []
     for lang_name, lang_code in LANGUAGES.items():
-        row.append(InlineKeyboardButton(text=lang_name.split()[0], callback_data=f"setlang_{lang_code}"))
+        row.append(InlineKeyboardButton(text=lang_name, callback_data=f"setlang_{lang_code}"))
         if len(row) == 2:
             buttons.append(row)
             row = []
@@ -181,7 +181,7 @@ async def show_ref(callback: CallbackQuery):
     text = (
         "👥 **Реферальная программа AI Bridge**\n\n"
         "Помоги нам собрать миллион подписчиков и общайся со всем миром бесплатно!\n\n"
-        f"🔗 **Твоя пригласительная ссылка:**\n`{ref_link}`\n\n"
+        f"🔗 **Твой пригласительная ссылка:**\n`{ref_link}`\n\n"
         f"📊 Вы пригласили партнеров: **{refs}**\n\n"
         "Перешли эту ссылку друзьям. Когда они запустят бота, они автоматически станут твоими рефералами!"
     )
